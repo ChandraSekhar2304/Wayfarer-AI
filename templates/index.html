@@ -5,7 +5,7 @@
 
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <title>TripMate AI</title>
+    <title>Wayfarer AI — Autonomous Multi-Agent Travel Planner</title>
 
     <link rel="stylesheet" href="/static/style.css">
 </head>
@@ -22,7 +22,7 @@
 
         <section class="hero-section">
             <div class="badge">
-                ✈️ TripMate AI — A Multi-Agent Travel Planner with LangGraph & MCP
+                ✈️ Wayfarer AI — Autonomous Multi-Agent Travel Architect with LangGraph & MCP
             </div>
 
             <h1>
@@ -80,6 +80,17 @@
                 </button>
             </div>
 
+            <div id="progressBox" class="progress-box hidden">
+                <div class="progress-header">
+                    <div class="agent-pulse"></div>
+                    <span id="progressStepTitle" class="progress-step-title">Initializing travel agents...</span>
+                </div>
+                <div class="progress-bar-track">
+                    <div id="progressBarFill" class="progress-bar-fill"></div>
+                </div>
+                <p id="progressStepDesc" class="progress-step-desc">Coordinating LangGraph multi-agent workflow...</p>
+            </div>
+
         </section>
 
         <section id="resultSection" class="result-section hidden">
@@ -113,7 +124,7 @@
     </main>
 
     <footer>
-        Built with FastAPI, LangGraph, Groq, PostgreSQL, Tavily and AviationStack
+        Built with FastAPI, LangGraph, Groq, PostgreSQL, Tavily, AviationStack & OpenWeather • Wayfarer AI
     </footer>
 
     <!-- Markdown Renderer -->

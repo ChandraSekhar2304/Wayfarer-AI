@@ -1,4 +1,4 @@
-let currentThreadId = localStorage.getItem("travel_thread_id") || null;
+let currentThreadId = localStorage.getItem("wayfarer_thread_id") || null;
 let latestAnswerMarkdown = "";
 
 function setPrompt(text) {
@@ -58,6 +58,62 @@ function showResult(answer, threadId) {
     });
 }
 
+let progressInterval = null;
+let progressStartTime = null;
+
+const UNIFORM_STAGES = [
+    { startSec: 0, endSec: 7.5, title: "✈️ Flight Agent Active", desc: "Analyzing airlines, routes, and airport options...", minP: 5, maxP: 24 },
+    { startSec: 7.5, endSec: 15, title: "🏨 Hotel Agent Searching", desc: "Querying Tavily MCP for top-rated hotels in your budget...", minP: 24, maxP: 46 },
+    { startSec: 15, endSec: 22.5, title: "🌤 Weather Agent Checking", desc: "Fetching live weather conditions and 5-day forecasts...", minP: 46, maxP: 68 },
+    { startSec: 22.5, endSec: 30, title: "📝 Itinerary Agent Planning", desc: "Structuring day-by-day activities and travel logistics...", minP: 68, maxP: 86 },
+    { startSec: 30, endSec: 38, title: "✨ Final Agent Assembling", desc: "Finalizing budget, schedules, and travel recommendations...", minP: 86, maxP: 96 }
+];
+
+function startProgressAnimation() {
+    const progressBox = document.getElementById("progressBox");
+    const title = document.getElementById("progressStepTitle");
+    const desc = document.getElementById("progressStepDesc");
+    const fill = document.getElementById("progressBarFill");
+
+    if (!progressBox) return;
+
+    progressBox.classList.remove("hidden");
+    progressStartTime = Date.now();
+
+    if (progressInterval) clearInterval(progressInterval);
+
+    progressInterval = setInterval(() => {
+        const elapsed = (Date.now() - progressStartTime) / 1000;
+        let currentStage = UNIFORM_STAGES.find(s => elapsed >= s.startSec && elapsed < s.endSec);
+
+        if (currentStage) {
+            title.textContent = currentStage.title;
+            desc.textContent = currentStage.desc;
+            const stageProgress = (elapsed - currentStage.startSec) / (currentStage.endSec - currentStage.startSec);
+            const currentPct = currentStage.minP + stageProgress * (currentStage.maxP - currentStage.minP);
+            fill.style.width = `${Math.min(currentPct, 96)}%`;
+        } else if (elapsed >= 38) {
+            title.textContent = "✨ Final Agent Assembling";
+            desc.textContent = "Polishing final travel plan and budget summary...";
+            const extra = Math.min((elapsed - 38) / 15, 1) * 2.5;
+            fill.style.width = `${96 + extra}%`;
+        }
+    }, 200);
+}
+
+function stopProgressAnimation() {
+    if (progressInterval) {
+        clearInterval(progressInterval);
+        progressInterval = null;
+    }
+    const fill = document.getElementById("progressBarFill");
+    const progressBox = document.getElementById("progressBox");
+    if (fill) fill.style.width = "100%";
+    setTimeout(() => {
+        if (progressBox) progressBox.classList.add("hidden");
+    }, 350);
+}
+
 async function sendMessage() {
     hideError();
 
@@ -70,6 +126,7 @@ async function sendMessage() {
     }
 
     setLoading(true);
+    startProgressAnimation();
 
     try {
         const response = await fetch("/api/travel", {
@@ -90,13 +147,14 @@ async function sendMessage() {
         }
 
         currentThreadId = data.thread_id;
-        localStorage.setItem("travel_thread_id", currentThreadId);
+        localStorage.setItem("wayfarer_thread_id", currentThreadId);
 
         showResult(data.answer, data.thread_id);
 
     } catch (error) {
         showError(error.message);
     } finally {
+        stopProgressAnimation();
         setLoading(false);
     }
 }

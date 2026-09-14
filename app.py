@@ -18,8 +18,8 @@ nest_asyncio.apply()
 BASE_DIR = Path(__file__).resolve().parent
 
 app = FastAPI(
-    title="TripMate AI",
-    description="LangGraph Multi-Agent Travel Planner with FastAPI Frontend",
+    title="Wayfarer AI",
+    description="Autonomous Multi-Agent Travel Planner with LangGraph and MCP",
     version="1.0.0"
 )
 
