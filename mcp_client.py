@@ -46,9 +46,13 @@ WEATHER_ENV["OPENWEATHER_API_KEY"] = (
 # LLM
 # ==========================================
 
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+
 llm = ChatGroq(
-    model="llama-3.3-70b-versatile",
-    api_key=GROQ_API_KEY
+    model=GROQ_MODEL,
+    api_key=GROQ_API_KEY,
+    max_tokens=1000,
+    temperature=0.3
 )
 
 
@@ -226,10 +230,16 @@ async def initialize_aviation_tools():
         )
 
 
+_aviation_restricted = False
+
 async def aviation_mcp_call(
     tool_name: str,
     tool_args: dict = None
 ):
+    global _aviation_restricted
+    if _aviation_restricted:
+        return [{"type": "text", "text": "AviationStack free plan: direct airline guidance used."}]
+
     await initialize_aviation_tools()
 
     tool = aviation_tools.get(tool_name)
@@ -249,6 +259,9 @@ async def aviation_mcp_call(
     result = await tool.ainvoke(
         tool_args or {}
     )
+
+    if "function_access_restricted" in str(result):
+        _aviation_restricted = True
 
     return result
 
@@ -350,6 +363,20 @@ async def forecast_mcp_search(city: str):
 # ==========================================
 
 def extract_destination(query: str):
+    import re
+    # Fast extraction for queries like "3-day trip to Tokyo", "visit Paris", "Japan trip", etc.
+    patterns = [
+        r'\b(?:to|visit|in|explore|for)\s+([A-Za-z\s]+?)(?:\s+(?:with|for|under|budget|on|from|in|\d)|[,\.]|$)',
+        r'([A-Za-z]+)\s+trip\b'
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, query, re.IGNORECASE)
+        if match:
+            dest = match.group(1).strip()
+            words = [w for w in dest.split() if w.lower() not in ("a", "an", "the", "my", "our", "complete", "short", "days", "day", "trip")]
+            if words:
+                return " ".join(words)
+
     prompt = f"""
     Extract only the destination city or country.
 

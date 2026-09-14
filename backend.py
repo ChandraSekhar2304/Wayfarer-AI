@@ -52,9 +52,13 @@ if not GROQ_API_KEY:
 # LLM
 # =========================
 
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+
 llm = ChatGroq(
-    model="llama-3.3-70b-versatile",
-    api_key=GROQ_API_KEY
+    model=GROQ_MODEL,
+    api_key=GROQ_API_KEY,
+    max_tokens=3000,
+    temperature=0.3
 )
 
 
@@ -128,17 +132,14 @@ def flight_agent(state: TravelState):
 
     try:
 
-        airports = asyncio.run(
-            aviation_mcp_call(
-                "list_airports"
+        async def get_flight_info():
+            return await asyncio.gather(
+                aviation_mcp_call("list_airports"),
+                aviation_mcp_call("list_airlines"),
+                return_exceptions=True
             )
-        )
 
-        airlines = asyncio.run(
-            aviation_mcp_call(
-                "list_airlines"
-            )
-        )
+        airports, airlines = asyncio.run(get_flight_info())
 
 
         print("\nAIRPORTS:", airports)
@@ -146,8 +147,8 @@ def flight_agent(state: TravelState):
 
         prompt = FLIGHT_AGENT_PROMPT.format(
             query=query,
-            airport_data=str(airports)[:3000],
-            airline_data=str(airlines)[:3000]
+            airport_data=str(airports)[:1000],
+            airline_data=str(airlines)[:1000]
         )
 
         response = llm.invoke([
@@ -205,13 +206,14 @@ def weather_agent(state: TravelState):
 
     city = extract_destination(state["user_query"])
 
-    weather_data = asyncio.run(
-        weather_mcp_search(city)
-    )
+    async def get_weather_data():
+        return await asyncio.gather(
+            weather_mcp_search(city),
+            forecast_mcp_search(city),
+            return_exceptions=True
+        )
 
-    forecast_data = asyncio.run(
-        forecast_mcp_search(city)
-    )
+    weather_data, forecast_data = asyncio.run(get_weather_data())
 
     return {
         "weather_results": f"""
@@ -243,13 +245,13 @@ User Query:
 {state['user_query']}
 
 Flight Results:
-{state['flight_results']}
+{str(state['flight_results'])[:1000]}
 
 Hotel Results:
-{state['hotel_results']}
+{str(state['hotel_results'])[:1000]}
 
 Weather Results:
-{state['weather_results']}
+{str(state['weather_results'])[:600]}
 
 Make the itinerary practical, budget-aware, and easy to follow.
 """
@@ -273,39 +275,36 @@ Make the itinerary practical, budget-aware, and easy to follow.
 
 def final_agent(state: TravelState):
     final_prompt = f"""
-Generate the final travel response for the user.
+Generate the executive travel summary, booking guidance, budget breakdown, and recommendations for the user.
 
-User Request:
-{state['user_query']}
+User Request: {state['user_query']}
+Flights: {str(state['flight_results'])[:1000]}
+Hotels: {str(state['hotel_results'])[:1000]}
+Weather: {str(state['weather_results'])[:600]}
 
-Flights:
-{state['flight_results']}
+Format beautifully in clean Markdown with these exact headings:
 
-Hotels:
-{state['hotel_results']}
+## 1. Trip Summary
+(Destination overview, trip duration, estimated total budget)
 
-Weather:
-{state['weather_results']}
+## 2. Flight Information
+(Recommended departure/arrival airports, airlines, flight duration, and booking advice table)
 
-Itinerary:
-{state['itinerary']}
+## 3. Hotel Suggestions
+(Top 2-3 hotel options table with neighborhood, price per night, and highlights)
 
-Format the final answer beautifully using these sections:
+## 4. Weather Information & Packing Tips
+(Current temperatures, conditions, forecast notes, and packing checklist)
 
-1. Trip Summary
-2. Flight Information
-3. Hotel Suggestions
-4. Weather Information
-5. Day-by-Day Itinerary
-6. Estimated Budget
-7. Final Recommendations
+## 6. Estimated Budget Breakdown
+(Itemized breakdown: Flights, Hotels, Daily Food/Transit, Attractions, Total)
 
+## 7. Final Recommendations
+(Money/cards, transport passes like Suica/Metro, navigation apps, local etiquette)
 
 Important:
-- Be clear and practical.
-- Mention that live flight API may not provide ticket prices if pricing is unavailable.
-- Include weather-based travel advice.
-- Keep the response useful for real travel planning.
+- Provide rich, structured Markdown tables for Flights, Hotels, and Budget.
+- Be clear, practical, and helpful.
 """
 
     response = llm.invoke([
@@ -313,8 +312,20 @@ Important:
         HumanMessage(content=final_prompt)
     ])
 
+    summary_text = response.content
+    itinerary_text = state.get("itinerary", "")
+
+    # Seamlessly insert Section 5 Day-by-Day Itinerary into the final response
+    if "## 6. Estimated Budget" in summary_text:
+        parts = summary_text.split("## 6. Estimated Budget", 1)
+        combined_content = f"{parts[0]}\n## 5. Day-by-Day Itinerary\n\n{itinerary_text}\n\n## 6. Estimated Budget{parts[1]}"
+    else:
+        combined_content = f"{summary_text}\n\n## 5. Day-by-Day Itinerary\n\n{itinerary_text}"
+
+    combined_message = AIMessage(content=combined_content)
+
     return {
-        "messages": [response],
+        "messages": [combined_message],
         "llm_calls": state.get("llm_calls", 0) + 1
     }
 
