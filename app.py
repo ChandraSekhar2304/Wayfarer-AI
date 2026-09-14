@@ -24,15 +24,34 @@ app = FastAPI(
 )
 
 
+# Robust path resolution for serverless environments (Vercel Lambda)
+static_candidates = [
+    BASE_DIR / "static",
+    Path("/var/task/static"),
+    Path.cwd() / "static",
+    BASE_DIR.parent / "static"
+]
+static_path = next((p for p in static_candidates if p.is_dir()), None)
+if not static_path:
+    static_path = BASE_DIR / "static"
+    static_path.mkdir(parents=True, exist_ok=True)
+
 app.mount(
     "/static",
-    StaticFiles(directory=str(BASE_DIR / "static")),
+    StaticFiles(directory=str(static_path)),
     name="static"
 )
 
+template_candidates = [
+    BASE_DIR / "templates",
+    Path("/var/task/templates"),
+    Path.cwd() / "templates",
+    BASE_DIR.parent / "templates"
+]
+templates_path = next((p for p in template_candidates if p.is_dir()), BASE_DIR / "templates")
 
 templates = Jinja2Templates(
-    directory=str(BASE_DIR / "templates")
+    directory=str(templates_path)
 )
 
 
@@ -45,11 +64,18 @@ class TravelRequest(BaseModel):
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
-    return templates.TemplateResponse(
-        request=request,
-        name="index.html",
-        context={}
-    )
+    try:
+        return templates.TemplateResponse(
+            request=request,
+            name="index.html",
+            context={}
+        )
+    except Exception:
+        # Resilient fallback: read index.html directly if Jinja2 has directory resolution issues in Lambda
+        for cand in [templates_path / "index.html", BASE_DIR / "templates" / "index.html", Path("/var/task/templates/index.html")]:
+            if cand.is_file():
+                return HTMLResponse(content=cand.read_text(encoding="utf-8"))
+        raise
 
 
 @app.post("/api/travel")

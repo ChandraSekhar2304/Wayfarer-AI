@@ -43,10 +43,7 @@ def get_database_url():
     return database_url
 
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-if not GROQ_API_KEY:
-    raise ValueError("GROQ_API_KEY is missing. Please add it to your .env file.")
-
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 
 # =========================
 # LLM
@@ -56,7 +53,7 @@ GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 
 llm = ChatGroq(
     model=GROQ_MODEL,
-    api_key=GROQ_API_KEY,
+    api_key=GROQ_API_KEY or "dummy_key_for_init",
     max_tokens=3000,
     temperature=0.3
 )
@@ -351,20 +348,40 @@ graph.add_edge("final_agent", END)
 
 
 # =========================
-# PostgreSQL Checkpointer
+# PostgreSQL / Memory Checkpointer
 # =========================
-DATABASE_URL = get_database_url()
 
-_conn = psycopg.connect(
-    DATABASE_URL,
-    autocommit=True,
-    row_factory=dict_row
-)
+_travel_graph = None
 
-checkpointer = PostgresSaver(_conn)
-checkpointer.setup()
+def get_travel_graph():
+    global _travel_graph
+    if _travel_graph is not None:
+        return _travel_graph
 
-travel_graph = graph.compile(checkpointer=checkpointer)
+    db_url = os.getenv("DATABASE_URL")
+    if db_url:
+        try:
+            if "sslmode=" not in db_url:
+                separator = "&" if "?" in db_url else "?"
+                db_url = f"{db_url}{separator}sslmode=require"
+
+            conn = psycopg.connect(
+                db_url,
+                autocommit=True,
+                row_factory=dict_row
+            )
+            checkpointer = PostgresSaver(conn)
+            checkpointer.setup()
+            _travel_graph = graph.compile(checkpointer=checkpointer)
+            print("LangGraph compiled successfully with PostgresSaver.")
+            return _travel_graph
+        except Exception as e:
+            print(f"Warning: PostgreSQL connection failed ({e}). Falling back to MemorySaver.")
+
+    from langgraph.checkpoint.memory import MemorySaver
+    _travel_graph = graph.compile(checkpointer=MemorySaver())
+    print("LangGraph compiled with MemorySaver fallback.")
+    return _travel_graph
 
 
 
@@ -373,6 +390,22 @@ travel_graph = graph.compile(checkpointer=checkpointer)
 # =========================
 
 def run_travel_agent(user_input: str, thread_id: str | None = None):
+    groq_key = os.getenv("GROQ_API_KEY")
+    if not groq_key:
+        raise ValueError("GROQ_API_KEY is missing. Please add it to your environment variables.")
+
+    # Re-instantiate llm if api_key was missing at module import
+    global llm
+    if getattr(llm, "api_key", None) in (None, "dummy_key_for_init", ""):
+        llm = ChatGroq(
+            model=os.getenv("GROQ_MODEL", "openai/gpt-oss-120b"),
+            api_key=groq_key,
+            max_tokens=3000,
+            temperature=0.3
+        )
+
+    tg = get_travel_graph()
+
     if not thread_id:
         thread_id = f"user_{uuid.uuid4().hex}"
 
@@ -382,7 +415,7 @@ def run_travel_agent(user_input: str, thread_id: str | None = None):
         }
     }
 
-    result = travel_graph.invoke(
+    result = tg.invoke(
         {
             "messages": [
                 HumanMessage(content=user_input)
