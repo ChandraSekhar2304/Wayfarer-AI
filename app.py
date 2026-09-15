@@ -8,8 +8,6 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
-from backend import run_travel_agent
-
 # This is to allow nested event loops for async calls in FastAPI
 import nest_asyncio
 nest_asyncio.apply()
@@ -81,6 +79,8 @@ async def home(request: Request):
 
 
 @app.post("/api/travel")
+@app.post("/api/index.py")
+@app.post("/")
 async def travel_planner(request_data: TravelRequest):
     try:
         user_message = request_data.message.strip()
@@ -93,6 +93,8 @@ async def travel_planner(request_data: TravelRequest):
                     "error": "Message cannot be empty."
                 }
             )
+
+        from backend import run_travel_agent
 
         result = run_travel_agent(
             user_input=user_message,
@@ -126,6 +128,7 @@ async def travel_planner(request_data: TravelRequest):
 
 
 @app.get("/health")
+@app.get("/api/health")
 async def health_check():
     return {
         "status": "ok",
