@@ -63,6 +63,8 @@ class TravelRequest(BaseModel):
 
 
 @app.get("/", response_class=HTMLResponse)
+@app.get("/api/index.py", response_class=HTMLResponse)
+@app.get("/api", response_class=HTMLResponse)
 async def home(request: Request):
     try:
         return templates.TemplateResponse(
