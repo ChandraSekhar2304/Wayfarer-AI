@@ -17,10 +17,6 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
-# Allow nested event loops for async calls in FastAPI
-import nest_asyncio
-nest_asyncio.apply()
-
 app = FastAPI(
     title="Wayfarer AI",
     description="Autonomous Multi-Agent Travel Planner with LangGraph and MCP",
@@ -160,7 +156,7 @@ class TravelRequest(BaseModel):
 @app.get("/", response_class=HTMLResponse)
 @app.get("/api/index.py", response_class=HTMLResponse)
 @app.get("/api", response_class=HTMLResponse)
-async def home(request: Request):
+def home(request: Request):
     if templates:
         try:
             return templates.TemplateResponse(
@@ -186,7 +182,7 @@ async def home(request: Request):
 @app.post("/api/travel")
 @app.post("/api/index.py")
 @app.post("/")
-async def travel_planner(request_data: TravelRequest):
+def travel_planner(request_data: TravelRequest):
     try:
         user_message = request_data.message.strip()
 
@@ -233,7 +229,7 @@ async def travel_planner(request_data: TravelRequest):
 
 @app.get("/health")
 @app.get("/api/health")
-async def health_check():
+def health_check():
     return {
         "status": "ok",
         "message": "Wayfarer AI Travel Planner API is running"
@@ -241,5 +237,5 @@ async def health_check():
 
 
 @app.get("/favicon.ico")
-async def favicon():
+def favicon():
     return JSONResponse(content={})
