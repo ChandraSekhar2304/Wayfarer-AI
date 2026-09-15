@@ -50,10 +50,23 @@ GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 
 llm = ChatGroq(
     model=GROQ_MODEL,
-    api_key=GROQ_API_KEY,
+    api_key=GROQ_API_KEY or "dummy_key_for_init",
     max_tokens=1000,
     temperature=0.3
 )
+
+
+def get_llm():
+    global llm
+    groq_key = os.getenv("GROQ_API_KEY")
+    if groq_key and getattr(llm, "api_key", None) in (None, "dummy_key_for_init", ""):
+        llm = ChatGroq(
+            model=os.getenv("GROQ_MODEL", "openai/gpt-oss-120b"),
+            api_key=groq_key,
+            max_tokens=1000,
+            temperature=0.3
+        )
+    return llm
 
 
 # ==========================================
@@ -386,6 +399,6 @@ def extract_destination(query: str):
     Return only destination name.
     """
 
-    response = llm.invoke(prompt)
+    response = get_llm().invoke(prompt)
 
     return response.content.strip()
